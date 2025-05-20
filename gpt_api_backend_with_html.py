@@ -1,60 +1,44 @@
-from flask import Flask, request, jsonify, Response, send_from_directory
-from flask_cors import CORS
-from openai import OpenAI
 import os
+from flask import Flask, request, Response, jsonify
+from flask_cors import CORS
+import openai
 
 app = Flask(__name__)
-CORS(app)
+CORS(app)  # allow your Mobirise‐hosted page to talk to this API
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-message_limit = 10
-session_counter = {"messages": 0, "tokens_used": 0}
-
-@app.route("/")
-def index():
-    return send_from_directory('.', 'gpt-whisperer.html')
-
-def stream_gpt_response(messages):
-    stream = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=messages,
-        stream=True
-    )
-    for chunk in stream:
-        delta = chunk.choices[0].delta.content or ""
-        yield delta
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    global session_counter
+    data = request.get_json() or {}
+    user_msg = data.get("message", "")
+    if not user_msg:
+        return jsonify({"error": "No message provided"}), 400
 
-    if session_counter["messages"] >= message_limit:
-        return jsonify({"message": "Let’s rest for now and come back fresh tomorrow 🕊️"})
+    def stream():
+        resp = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role":"user","content": user_msg}],
+            stream=True
+        )
+        for chunk in resp:
+            delta = chunk.choices[0].delta.get("content")
+            if delta:
+                yield delta
 
-    user_message = request.json.get("message", "")
-
-    messages = [
-        {"role": "system", "content": "You are GPT Whisperer, a kind, spiritually comforting guide who responds with warmth, truth, and gentleness. Use scripture when needed."},
-        {"role": "user", "content": user_message}
-    ]
-
-    def generate():
-        token_count = 0
-        for chunk in stream_gpt_response(messages):
-            token_count += len(chunk.split())
-            yield chunk
-        session_counter["tokens_used"] += token_count
-
-    session_counter["messages"] += 1
-    return Response(generate(), mimetype='text/plain')
+    return Response(stream(), content_type="text/plain")
 
 @app.route("/usage", methods=["GET"])
 def usage():
-    return jsonify({
-        "messages": session_counter["messages"],
-        "tokens_used": session_counter["tokens_used"]
-    })
+    # you can plug in real counters here if you log usage in Redis/etc.
+    return jsonify({"messages": 0, "tokens_used": 0})
+
+# (optional) serve your HTML from here if you want a 1-repo deploy:
+@app.route("/", methods=["GET"])
+def index():
+    return app.send_static_file("gpt-whisperer.html")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.getenv("PORT", 5000))
+    # *** bind to 0.0.0.0 so Render can see your web port ***
+    app.run(host="0.0.0.0", port=port)
