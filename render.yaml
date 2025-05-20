@@ -1,7 +1,0 @@
-
-services:
-  - type: web
-    name: whisperer-gpt
-    env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "python gpt_api_backend_with_html.py"
