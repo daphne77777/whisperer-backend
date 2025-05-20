@@ -60,6 +60,7 @@ async function sendMessage() {
 
   try {
     let res = await fetch('https://whisperer-gpt.onrender.com/chat', {
+      + fetch('/chat', {          // same change for /usage
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body: JSON.stringify({message: msg})
@@ -93,6 +94,7 @@ function updateLast(txt) {
 
 async function updateUsage() {
   let r = await fetch('https://whisperer-gpt.onrender.com/usage');
+  + fetch('/chat', {          // same change for /usage
   let j = await r.json();
   document.getElementById('usage')
     .innerText = `Messages: ${j.messages} | Tokens used: ${j.tokens_used}`;
