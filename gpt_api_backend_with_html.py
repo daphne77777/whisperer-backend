@@ -1,62 +1,48 @@
+# Updated GPT Whisperer backend with OpenAI >=1.0.0 support
 
-from flask import Flask, request, jsonify, Response, send_from_directory
-import openai
+from flask import Flask, request, jsonify, stream_with_context, Response
+from flask_cors import CORS
 import os
+from openai import OpenAI
 
 app = Flask(__name__)
+CORS(app)
 
-# Add your OpenAI API key here
-openai.api_key = "YOUR_API_KEY_HERE"
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-message_limit = 10
-session_counter = {"messages": 0, "tokens_used": 0}
-
-@app.route("/")
-def index():
-    return send_from_directory('.', 'gpt-whisperer.html')
-
-def stream_gpt_response(messages):
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5",
-        messages=messages,
-        stream=True
-    )
-    for chunk in response:
-        if 'choices' in chunk and chunk['choices'][0]['delta'].get('content'):
-            yield chunk['choices'][0]['delta']['content']
+# In-memory usage tracker
+usage = {"messages": 0, "tokens_used": 0}
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    global session_counter
-
-    if session_counter["messages"] >= message_limit:
-        return jsonify({"message": "Let’s rest for now and come back fresh tomorrow 🕊️"})
-
-    user_message = request.json.get("message", "")
-
-    messages = [
-        {"role": "system", "content": "You are GPT Whisperer, a kind, spiritually comforting guide who responds with warmth, truth, and gentleness. Use scripture when needed."},
-        {"role": "user", "content": user_message}
-    ]
+    data = request.get_json()
+    user_input = data.get("message", "")
 
     def generate():
-        token_count = 0
-        for chunk in stream_gpt_response(messages):
-            token_count += len(chunk.split())
-            yield chunk
-        session_counter["tokens_used"] += token_count
+        try:
+            stream = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": user_input}],
+                stream=True
+            )
 
-    session_counter["messages"] += 1
-    return Response(generate(), mimetype='text/plain')
+            full_response = ""
+            for chunk in stream:
+                delta = chunk.choices[0].delta.content or ""
+                full_response += delta
+                yield delta
 
-@app.route("/usage", methods=["GET"])
-def usage():
-    return jsonify({
-        "messages": session_counter["messages"],
-        "tokens_used": session_counter["tokens_used"]
-    })
+            usage["messages"] += 1
+            usage["tokens_used"] += len(full_response.split())  # Estimate tokens
+
+        except Exception as e:
+            yield f"[ERROR]: {str(e)}"
+
+    return Response(stream_with_context(generate()), content_type='text/plain')
+
+@app.route("/usage")
+def get_usage():
+    return jsonify(usage)
 
 if __name__ == "__main__":
-   import os
-port = int(os.environ.get("PORT", 5000))
-app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=5000)
