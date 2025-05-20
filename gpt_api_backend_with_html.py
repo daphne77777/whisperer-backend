@@ -1,44 +1,54 @@
 import os
-from flask import Flask, request, Response, jsonify
-from flask_cors import CORS
 import openai
+from flask import Flask, request, Response, jsonify, send_from_directory
+from flask_cors import CORS
 
+# === CONFIG ===
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # repo root
+HTML_NAME = 'gpt-whisperer.html'
+
+# === APP SETUP ===
 app = Flask(__name__)
-CORS(app)  # allow your Mobirise‐hosted page to talk to this API
-
+CORS(app)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-@app.route("/chat", methods=["POST"])
+# === CHAT STREAM ===
+@app.route('/chat', methods=['POST'])
 def chat():
     data = request.get_json() or {}
     user_msg = data.get("message", "")
     if not user_msg:
         return jsonify({"error": "No message provided"}), 400
 
-    def stream():
+    def streamer():
         resp = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[{"role":"user","content": user_msg}],
+            messages=[{"role": "user", "content": user_msg}],
             stream=True
         )
         for chunk in resp:
-            delta = chunk.choices[0].delta.get("content")
-            if delta:
-                yield delta
+            text = chunk.choices[0].delta.get("content")
+            if text:
+                yield text
 
-    return Response(stream(), content_type="text/plain")
+    return Response(streamer(), content_type="text/plain")
 
-@app.route("/usage", methods=["GET"])
+# === USAGE COUNTER ===
+@app.route('/usage', methods=['GET'])
 def usage():
-    # you can plug in real counters here if you log usage in Redis/etc.
     return jsonify({"messages": 0, "tokens_used": 0})
 
-# (optional) serve your HTML from here if you want a 1-repo deploy:
-@app.route("/", methods=["GET"])
+# === SERVE YOUR HTML ===
+@app.route('/', methods=['GET', 'HEAD'])
 def index():
-    return app.send_static_file("gpt-whisperer.html")
+    html_path = os.path.join(BASE_DIR, HTML_NAME)
+    app.logger.info(f"Index hit: looking for {html_path} — exists={os.path.exists(html_path)}")
+    if not os.path.exists(html_path):
+        return f"⚠️ Could not find {HTML_NAME} in {BASE_DIR}", 500
+    return send_from_directory(BASE_DIR, HTML_NAME)
 
-if __name__ == "__main__":
+# === RUN ===
+if __name__ == '__main__':
     port = int(os.getenv("PORT", 5000))
-    # *** bind to 0.0.0.0 so Render can see your web port ***
-    app.run(host="0.0.0.0", port=port)
+    # bind to 0.0.0.0 so Render can health-check it
+    app.run(host='0.0.0.0', port=port)
