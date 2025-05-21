@@ -5,7 +5,7 @@ from flask_cors import CORS
 
 # === CONFIG ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # repo root
-HTML_NAME = 'gpt-whisperer.html'
+HTML_NAME = 'index.html'
 
 # === APP SETUP ===
 app = Flask(__name__)
