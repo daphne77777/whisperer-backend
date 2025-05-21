@@ -2,9 +2,9 @@ services:
   - type: web
     name: whisperer-gpt
     env: python
-    plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: python gpt_api_backend_with_html.py
+    startCommand: python app.py
     envVars:
       - key: OPENAI_API_KEY
-        sync: true
+        value: sk-XXXX-YOUR-REAL-KEY
+
