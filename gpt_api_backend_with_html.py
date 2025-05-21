@@ -9,7 +9,7 @@ HTML_NAME = 'gpt-whisperer.html'
 
 # === APP SETUP ===
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["https://whisperer-backend.onrender.com"])
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # === CHAT STREAM ===
